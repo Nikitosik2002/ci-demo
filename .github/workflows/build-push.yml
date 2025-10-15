@@ -5,28 +5,38 @@ on:
     branches: [ "main" ]
   pull_request:
 
-env:
-  IMAGE_NAME: ghcr.io/${{ github.repository }}/ci-demo
-
 jobs:
   build_test_push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    steps:
-      - uses: actions/checkout@v4
 
-      # тесты (простейшие)
-      - name: Run tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # === ТЕСТЫ (минимальные) ===
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: |
+
+      - name: Install deps and run tests
+        run: |
+          set -euxo pipefail
+          python -V
           pip install -r requirements.txt pytest
           pytest -q
 
-      # логин в GHCR
+      # === ИМЯ ОБРАЗА (ТОЛЬКО lower-case!) ===
+      - name: Compute image name (lowercase)
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
+      - name: Show image name
+        run: echo "$IMAGE_NAME"
+
+      # === ЛОГИН В GHCR ===
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -34,11 +44,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # сборка и пуш образа
+      # === СБОРКА И ПУШ ===
       - name: Build image
-        run: docker build -t $IMAGE_NAME:${{ github.sha }} -t $IMAGE_NAME:latest .
+        run: |
+          set -euxo pipefail
+          docker build -t "$IMAGE_NAME:${GITHUB_SHA}" -t "$IMAGE_NAME:latest" .
 
       - name: Push image
         run: |
-          docker push $IMAGE_NAME:${{ github.sha }}
-          docker push $IMAGE_NAME:latest
+          set -euxo pipefail
+          docker push "$IMAGE_NAME:${GITHUB_SHA}"
+          docker push "$IMAGE_NAME:latest"
